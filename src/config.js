@@ -1,6 +1,6 @@
 var config = {
     style: 'mapbox://styles/mapbox/light-v10',
-    accessToken: /*'YOUR MAPBOX TOKEN HERE'*/,
+    accessToken: 'pk.eyJ1Ijoia3dzdGFuY2lsIiwiYSI6ImNsNnlmZ3U3dTA1cnIza255MHQyMmo5MXQifQ.ZZIWcR1AHum3EElxlyI2cQ',
     showMarkers: false,
     markerColor: '#3FB1CE',
     projection: 'equirectangular',
@@ -25,7 +25,8 @@ var config = {
                 center: [10.55606, 35.19720],
                 zoom: 2,
                 pitch: 0,
-                bearing: 0
+                bearing: 0,
+                speed: 100
             },
             mapAnimation: 'flyTo',
             rotateAnimation: false,
@@ -48,6 +49,40 @@ var config = {
             onChapterExit: []
         },
         {
+            id: 'vaxrates',
+            alignment: 'full',
+            hidden: false,
+            title: 'Share of Population Fully Vaccinated Per 100 People in Each Country Over Time',
+            image: '',
+            description: '<iframe class="iframe" width=100% height='+ window.innerHeight +' src="vax_index.html" title="global-covid-19-vaccine-apartheid" style="border:none;"></iframe>',
+            location: {
+                center: [0, 0],
+                zoom: 20,
+                pitch: 0,
+                bearing: 0,
+                speed: 100
+            },
+            mapAnimation: 'flyTo',
+            rotateAnimation: false,
+            callback:'',
+            onChapterEnter: [
+              {
+                  layer: 'vaccination_rates',
+                  opacity: [
+                    'case',
+                    ['boolean', ['feature-state', 'hover'], false],
+                    1.0,
+                    0.7
+                  ]
+              },
+              {
+                  layer: 'support_trips_waiver',
+                  opacity: 0
+              }
+          ],
+            onChapterExit: []
+        },
+        {
             id: 'reasons',
             alignment: 'left',
             hidden: false,
@@ -58,7 +93,8 @@ var config = {
                 center: [10.55606, 35.19720],
                 zoom: 2,
                 pitch: 0,
-                bearing: 0
+                bearing: 0,
+                speed: 100
             },
             mapAnimation: 'flyTo',
             rotateAnimation: false,
