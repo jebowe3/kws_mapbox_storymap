@@ -54,7 +54,7 @@ var config = {
             hidden: false,
             title: 'Share of Population Fully Vaccinated Per 100 People in Each Country Over Time',
             image: '',
-            description: '<iframe class="iframe" width=100% height='+ window.innerHeight +' src="vax_index.html" title="global-covid-19-vaccine-apartheid" style="border:none;"></iframe>',
+            description: '<iframe class="iframe" width=100% height='+ window.innerHeight +' src="vax_index_new.html" title="global-covid-19-vaccine-apartheid" style="border:none;"></iframe>',
             location: {
                 center: [0, 0],
                 zoom: 20,
