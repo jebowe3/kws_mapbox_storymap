@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset='utf-8' />
+  <title>Global COVID-19 Vaccinations</title>
+  <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+  <!-- mapbox-gl.css here -->
+  <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v2.7.0/mapbox-gl.css' rel='stylesheet' />
+  <!-- Rubik font -->
+  <link href="https://fonts.googleapis.com/css?family=Rubik&display=swap" rel="stylesheet">
+
+  <style>
+    /* basic css to style the viewer goes here */
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      background-color: rgba(255, 255, 255, 1.0);
+    }
+
+    /* set styles for the container holding the title and slider */
+    .session {
+      position: absolute;
+      z-index: 1;
+      background-color: rgba(255, 255, 255, 0.5);
+      border-radius: 3px;
+      box-shadow: 0px 0px 0px 1px rgba(0, 0, 0, 0.3);
+      top: 10px;
+      left: 10px;
+      padding: 5px;
+    }
+
+    /* set styles for the container holding the year legend */
+    .container {
+      display: table;
+      width: 100%;
+      margin: 0;
+    }
+
+    /* set font styles for the title */
+    h1 {
+      font-size: 20px;
+      font-family: 'Rubik', sans-serif;
+      padding-bottom: 0px;
+      padding-top: 0px;
+      font-weight: normal;
+    }
+
+    /* set font styles for the identified year */
+    h2 {
+      cursor: pointer;
+      font-size: 14px;
+      font-family: 'Rubik', sans-serif;
+      padding-bottom: 0px;
+      padding-top: 0px;
+      font-weight: normal;
+      width: 50%;
+      text-align: left;
+      display: table-cell;
+    }
+
+    /* define the slider width and change the cursor to a pointer on hover */
+    #slider {
+      cursor: pointer;
+      width: 275px;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <!-- id the map div -->
+  <div id='map'></div>
+
+  <!-- title and time slider -->
+  <div class='session' id='sliderbar'>
+    <!-- the shown title of the map -->
+    <h1>Fully Vaccinated for COVID-19<br>Per 100 People</h1>
+    <div class='container'>
+      <!-- the selected date -->
+      <h2>Date: <label id='active-date'></label></h2>
+    </div>
+    <!-- the slider accepts a range of julian day numbers starting from 2459197 at intervals of 1 day
+    the max and value will be defined with the most recent date in the javascript below -->
+    <input id='slider' class='row' type='range' min='2459197' max='' step='1' value='' />
+  </div>
+
+  <!-- mapbox-gl.js library -->
+  <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v2.7.0/mapbox-gl.js'></script>
+  <!-- jQuery -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <!-- PapaParse -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/4.1.2/papaparse.min.js"></script>
+
+  <script>
+
+    // define today's date
+    const tDate = new Date().toLocaleDateString('en-ca');
+    // convert today's date to a unix timestamp
+    const unixDate = new Date(tDate).getTime();
+    // convert the unix timestamp to a julian day number
+    // subtract by one because the current day's data may not have been added
+    const tJulDate = Math.round((unixDate/86400000)+2440587.5)-1;
+
+    // set the max slider value to today's julian day number
+    document.getElementById('active-date').value = tJulDate;
+    document.getElementById('slider').max = tJulDate;
+    document.getElementById('slider').value = tJulDate;
+
+    // define the initial slider-selected date
+    const cursoryDate = document.getElementById('slider').value;
+
+    // convert this date to a numeric value
+    const numDate = parseInt(cursoryDate);
+
+    // convert the initial julian day to a gregorian calendar date
+    const initDate = gregorianDate(cursoryDate);
+
+    // update text in the UI
+    document.getElementById('active-date').innerText = initDate;
+
+    // define empty arrays to hold property objects
+    const countryProps = [];
+    const fullyVaxedProps = [];
+    const finalProps = [];
+
+    // access token
+    mapboxgl.accessToken = 'pk.eyJ1Ijoia3dzdGFuY2lsIiwiYSI6ImNsNnlmZ3U3dTA1cnIza255MHQyMmo5MXQifQ.ZZIWcR1AHum3EElxlyI2cQ';
+
+    // define the map
+    const map = new mapboxgl.Map({
+      container: 'map',
+      center: [0, 25], // starting position
+      maxBounds: [
+        [-180, -90],
+        [180, 90]
+      ], // the coordinate boundaries of the world
+      zoom: 1,
+      minZoom: 1,
+      maxZoom: 1,
+      style: 'mapbox://styles/mapbox/light-v10' // add the style here
+    });
+
+    // when the map loads, call a function
+    map.on('load', () => {
+      // AJAX request for GeoJSON data
+      $.getJSON("../data/countries.geojson", function(countries) {
+        // use Papa.parse to read csv data directly from the web source
+        Papa.parse('https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/vaccinations/vaccinations.csv', {
+          download: true,
+          header: true,
+          complete: function(csvData) {
+            // call the addSources function
+            addSources(countries, csvData, initDate);
+            // listen for a slider input
+            document.getElementById('slider').addEventListener('input', (event) => {
+              // define the newly-selected year
+              const newDate = gregorianDate(event.target.value);
+              // update text in the UI
+              document.getElementById('active-date').innerText = newDate;
+              // call the timeFilterData function
+              timeFilterData(countries, csvData, newDate);
+            });
+          }
+        }); // end of Papa.parse()
+      });
+    });
+
+    // define a function to add the data sources to the map
+    function addSources(geojson, data, date) {
+      // call the processData function
+      processData(geojson, data, date);
+      // add the source to the map
+      map.addSource('geojson', {
+        type: 'geojson',
+        data: geojson // use our processed data as the data source
+      });
+      // add the GeoJSON data as a mapbox gl layer
+      map.addLayer({
+        'id': 'geojson',
+        'type': 'fill',
+        'source': 'geojson', // refers to source above
+        'layout': {},
+        'paint': {
+          'fill-color': ['step', ['get', 'people_fully_vaccinated_per_hundred'], '#ffffff', 0, '#f7fbff', 14, '#c8ddf0', 36, '#73b3d8', 57, '#2879b9', 76, '#08306b'],
+          'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], !1], 1.0, ['case', ["==", ["get", "people_fully_vaccinated_per_hundred"], null], 0.0, 0.7]],
+        }
+      });
+    }; // end addSources();
+
+    // define a function to process the data
+    function processData(geojson, data, date) {
+      // the first loop adds properties to the countryProps array
+      for (const g in geojson.features) {
+        // define an empty object
+        const obj = {};
+        // assign the object some properties from the geojson
+        Object.assign(obj, {
+          ISO_A3: geojson.features[g].properties.ISO_A3
+        });
+        // push the object to the countryProps array
+        countryProps.push(obj);
+      }; // end first loop
+      // the second loop adds properties to the fullyVaxedProps array
+      for (const d in data.data) {
+        // if the date in the csv data equals the given date...
+        if (data.data[d].date == date) {
+          // define an empty object
+          const obj = {};
+          // assign the object some properties from the csv
+          Object.assign(obj, {
+            location: data.data[d].location,
+            iso_code: data.data[d].iso_code,
+            date: data.data[d].date,
+            people_fully_vaccinated_per_hundred: parseFloat(data.data[d].people_fully_vaccinated_per_hundred)
+          });
+          // push the object to the fullyVaxedProps array
+          fullyVaxedProps.push(obj);
+        }
+      }; // end second loop
+      // the third loop combines matches between the two property arrays
+      for (const c in countryProps) {
+        // define an empty object
+        const obj = {};
+        // define the countryProps properties
+        const props = countryProps[c];
+        // assign the objects the country ISO_A3 properties
+        // and empty properties to hold matches from the fullyVaxedProps properties
+        Object.assign(obj, {
+          ISO_A3: props.ISO_A3,
+          location: '',
+          iso_code: '',
+          date: '',
+          people_fully_vaccinated_per_hundred: null
+        });
+        // iterate through the fullyVaxedProps array
+        for (const f in fullyVaxedProps) {
+          // if there is an iso code match...
+          if (props.ISO_A3 == fullyVaxedProps[f].iso_code) {
+            // assign the object the properties from the fullyVaxedProps array
+            Object.assign(obj, {
+              location: fullyVaxedProps[f].location,
+              iso_code: fullyVaxedProps[f].iso_code,
+              date: fullyVaxedProps[f].date,
+              people_fully_vaccinated_per_hundred: fullyVaxedProps[f].people_fully_vaccinated_per_hundred
+            });
+          }
+        };
+        // push the object to the finalProps array
+        finalProps.push(obj);
+      }; // end of third loop
+      // the fourth loop redefines the geojson properties with the finalProps properties
+      for (const x in geojson.features) {
+        // define the properties of the geojson layer
+        const props = geojson.features[x].properties;
+        // for each value in the finalProps array...
+        for (const p in finalProps) {
+          // if the ISO_A3 property of the geojson layer equals
+          // the ISO_A3 property in the finalProps...
+          if (props.ISO_A3 == finalProps[p].ISO_A3) {
+            // set the geojson properties equal to the fullyVaxedProps
+            geojson.features[x].properties = finalProps[p];
+            //break;
+          }
+        }
+      }; // end of the fourth loop
+    }; // end processData()
+
+    // define a function to filter the data by the selected date
+    function timeFilterData(geojson, data, date) {
+      // clear property arrays
+      countryProps.length = 0;
+      fullyVaxedProps.length = 0;
+      finalProps.length = 0;
+      // call the processData function
+      processData(geojson, data, date);
+      // reset the data in the source layer
+      map.getSource('geojson').setData(geojson);
+    };  // end timeFilterData()
+
+    // QGIS Field Calculator for JDN: (epoch("Date")/ 86400000) + 2440587.5 // Just to remember how to convert a calendar date to a julian day number
+
+    // define a function to convert the Julian Day Number back to a Gregorian Calendar Date
+    function gregorianDate(julianDate) {
+      var X = parseFloat(julianDate) + 0.5;
+      var Z = Math.floor(X); //Get day without time
+      var F = X - Z; //Get time
+      var Y = Math.floor((Z - 1867216.25) / 36524.25);
+      var A = Z + 1 + Y - Math.floor(Y / 4);
+      var B = A + 1524;
+      var C = Math.floor((B - 122.1) / 365.25);
+      var D = Math.floor(365.25 * C);
+      var G = Math.floor((B - D) / 30.6001);
+      //must get number less than or equal to 12)
+      var month_p = (G < 13.5) ? (G - 1) : (G - 13);
+      //if Month is January or February, or the rest of year
+      var year = (month_p < 2.5) ? (C - 4715) : (C - 4716);
+      month_p -= 1; //Handle JavaScript month format
+      var month = ("00" + (month_p + 1)).slice(-2);
+      var UT = B - D - Math.floor(30.6001 * G) + F;
+      var day = ("00" + (Math.floor(UT))).slice(-2);
+      //Determine time
+      UT -= Math.floor(UT);
+      UT *= 24;
+      var hour = Math.floor(UT);
+      UT -= Math.floor(UT);
+      UT *= 60;
+      var minute = Math.floor(UT);
+      //end conversion of Julian Day Number to Gregorian Calendar date
+      //return the Gregorian Date
+      return year + "-" + month + "-" + day;
+    }; // end gregorianDate()
+
+/* HOVER SETTINGS BELOW */
+
+    // create a popup without adding to map
+    let popup = new mapboxgl.Popup({
+      closeButton: false,
+      closeOnClick: false
+    });
+
+    // define initial hover state
+    let hoveredStateId = null;
+
+    // fire a function on a mousemove and feed it the geojson we gave an id of 'geojson'
+    map.on('mousemove', 'geojson', (e) => {
+
+      // change the cursor style as a UI indicator.
+      map.getCanvas().style.cursor = 'pointer';
+
+      // reset the hover state id on mousemove so the layer knows when to change opacity
+      if (e.features.length > 0) {
+        if (hoveredStateId !== null) {
+          map.setFeatureState({
+            source: 'geojson',
+            id: hoveredStateId
+          }, {
+            hover: false
+          });
+        }
+        hoveredStateId = e.features[0].id;
+        map.setFeatureState({
+          source: 'geojson',
+          id: hoveredStateId
+        }, {
+          hover: true
+        });
+      }
+
+      // define the layer properties
+      // with "e.features[0].properties," you have access to all of the properties from the initial geojson layer
+      let props = e.features[0].properties;
+
+      // get the popup defined above
+      popup
+        .setLngLat(e.lngLat) // the location of the cursor
+        .setHTML('<b>' + props.location + '</b><hr>Date: ' + props.date + '<br>' + props.people_fully_vaccinated_per_hundred + '/100 fully vaccinated') // feed the popup the prop info
+        .addTo(map) // add the popup to the map
+
+    });
+
+    // when you mouse off the layer...
+    map.on('mouseleave', 'geojson', () => {
+
+      // change the cursor style back to initial setting
+      map.getCanvas().style.cursor = '';
+
+      // reset the hover state id
+      if (hoveredStateId !== null) {
+        map.setFeatureState({
+          source: 'geojson',
+          id: hoveredStateId
+        }, {
+          hover: false
+        });
+      }
+      hoveredStateId = null;
+
+      // and remove the popup
+      popup.remove();
+
+    });
+
+/* END OF HOVER SETTINGS */
+
+  </script>
+</body>
+
+</html>
