@@ -116,22 +116,6 @@
     document.getElementById('slider').max = tJulDate;
     document.getElementById('slider').value = tJulDate;
 
-
-// TESTING, PROBS NOT NEEDED
-    // define the minimum and maximum julian day numbers
-    const min = parseInt(document.getElementById('slider').min);
-    const max = tJulDate;
-    // define an array of numbers from the minimum to the maximum julian day number
-    const azJDNArray = Array.apply(null, {length: max + 1 - min}).map(function(_, idx) {
-                         return gregorianDate(idx + min);
-                       });
-
-    // reverse this array
-    const zaJDNArray = azJDNArray.reverse();
-
-// END TESTING
-
-
     // define the initial slider-selected date
     const cursoryDate = document.getElementById('slider').value;
 
