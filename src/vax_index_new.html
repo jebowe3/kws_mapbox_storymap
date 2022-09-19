@@ -116,6 +116,22 @@
     document.getElementById('slider').max = tJulDate;
     document.getElementById('slider').value = tJulDate;
 
+
+// TESTING, PROBS NOT NEEDED
+    // define the minimum and maximum julian day numbers
+    const min = parseInt(document.getElementById('slider').min);
+    const max = tJulDate;
+    // define an array of numbers from the minimum to the maximum julian day number
+    const azJDNArray = Array.apply(null, {length: max + 1 - min}).map(function(_, idx) {
+                         return gregorianDate(idx + min);
+                       });
+
+    // reverse this array
+    const zaJDNArray = azJDNArray.reverse();
+
+// END TESTING
+
+
     // define the initial slider-selected date
     const cursoryDate = document.getElementById('slider').value;
 
@@ -127,11 +143,6 @@
 
     // update text in the UI
     document.getElementById('active-date').innerText = initDate;
-
-    // define empty arrays to hold property objects
-    const countryProps = [];
-    const fullyVaxedProps = [];
-    const finalProps = [];
 
     // access token
     mapboxgl.accessToken = 'pk.eyJ1Ijoia3dzdGFuY2lsIiwiYSI6ImNsNnlmZ3U3dTA1cnIza255MHQyMmo5MXQifQ.ZZIWcR1AHum3EElxlyI2cQ';
@@ -149,6 +160,12 @@
       maxZoom: 1,
       style: 'mapbox://styles/mapbox/light-v10' // add the style here
     });
+
+    // define empty arrays to hold property objects
+    let countryProps = [];
+    let filteredData = [];
+    let initProps = [];
+    let finalProps = [];
 
     // when the map loads, call a function
     map.on('load', () => {
@@ -199,6 +216,13 @@
 
     // define a function to process the data
     function processData(geojson, data, date) {
+
+      // clear property arrays
+      countryProps = [];
+      filteredData = [];
+      initProps = [];
+      finalProps = [];
+
       // the first loop adds properties to the countryProps array
       for (const g in geojson.features) {
         // define an empty object
@@ -210,24 +234,57 @@
         // push the object to the countryProps array
         countryProps.push(obj);
       }; // end first loop
-      // the second loop adds properties to the fullyVaxedProps array
-      for (const d in data.data) {
-        // if the date in the csv data equals the given date...
-        if (data.data[d].date == date) {
+
+      // organize our csv data by country (iso_code)
+      const dataByCountry = groupBy(data.data, 'iso_code');
+
+      // for the second loop, loop through each array in dataByCountry
+      for (const array in dataByCountry) {
+        // identify each array of objects
+        const eachArray = dataByCountry[array];
+        // for each object in each array...
+        for (const a in eachArray) {
+          // if the date is less than the selected date and the fully vaxed props are present...
+          if (eachArray[a].date <= date && eachArray[a].people_fully_vaccinated_per_hundred !== "") {
+            // push the object to the filteredData array
+            filteredData.push(eachArray[a]);
+          };
+        }
+      }; // end second loop
+
+      // organize filteredData by country (iso_code)
+      const filteredDataByCountry = groupBy(filteredData, 'iso_code');
+
+      // for the third loop, loop through each array in filteredDataByCountry
+      for (const array in filteredDataByCountry) {
+        // identify each array of objects
+        const eachArray = filteredDataByCountry[array];
+
+        // now, find the object in each with the most recent data...
+        const mostRecentDate = new Date(Math.max.apply(null, eachArray.map( e => {
+          return new Date(e.date);
+        })));
+        const mostRecentObject = eachArray.filter( e => {
+          const d = new Date( e.date );
+          return d.getTime() == mostRecentDate.getTime();
+        })[0];
+
+        if (mostRecentObject !== undefined) {
           // define an empty object
           const obj = {};
           // assign the object some properties from the csv
           Object.assign(obj, {
-            location: data.data[d].location,
-            iso_code: data.data[d].iso_code,
-            date: data.data[d].date,
-            people_fully_vaccinated_per_hundred: parseFloat(data.data[d].people_fully_vaccinated_per_hundred)
+            location: mostRecentObject.location,
+            iso_code: mostRecentObject.iso_code,
+            date: mostRecentObject.date,
+            people_fully_vaccinated_per_hundred: parseFloat(mostRecentObject.people_fully_vaccinated_per_hundred)
           });
-          // push the object to the fullyVaxedProps array
-          fullyVaxedProps.push(obj);
+          // push the returned object to the initProps array
+          initProps.push(obj);
         }
-      }; // end second loop
-      // the third loop combines matches between the two property arrays
+      }; // end of third loop
+
+      // the fourth loop combines matches between the two property arrays
       for (const c in countryProps) {
         // define an empty object
         const obj = {};
@@ -242,23 +299,24 @@
           date: '',
           people_fully_vaccinated_per_hundred: null
         });
-        // iterate through the fullyVaxedProps array
-        for (const f in fullyVaxedProps) {
+        // iterate through the initProps array
+        for (const f in initProps) {
           // if there is an iso code match...
-          if (props.ISO_A3 == fullyVaxedProps[f].iso_code) {
-            // assign the object the properties from the fullyVaxedProps array
+          if (props.ISO_A3 == initProps[f].iso_code) {
+            // assign the object the properties from the initProps array
             Object.assign(obj, {
-              location: fullyVaxedProps[f].location,
-              iso_code: fullyVaxedProps[f].iso_code,
-              date: fullyVaxedProps[f].date,
-              people_fully_vaccinated_per_hundred: fullyVaxedProps[f].people_fully_vaccinated_per_hundred
+              location: initProps[f].location,
+              iso_code: initProps[f].iso_code,
+              date: initProps[f].date,
+              people_fully_vaccinated_per_hundred: initProps[f].people_fully_vaccinated_per_hundred
             });
           }
         };
         // push the object to the finalProps array
         finalProps.push(obj);
-      }; // end of third loop
-      // the fourth loop redefines the geojson properties with the finalProps properties
+      }; // end of fourth loop
+
+      // the fifth loop redefines the geojson properties with the finalProps properties
       for (const x in geojson.features) {
         // define the properties of the geojson layer
         const props = geojson.features[x].properties;
@@ -269,18 +327,14 @@
           if (props.ISO_A3 == finalProps[p].ISO_A3) {
             // set the geojson properties equal to the fullyVaxedProps
             geojson.features[x].properties = finalProps[p];
-            //break;
           }
         }
-      }; // end of the fourth loop
+      }; // end of the fifth loop
+
     }; // end processData()
 
     // define a function to filter the data by the selected date
     function timeFilterData(geojson, data, date) {
-      // clear property arrays
-      countryProps.length = 0;
-      fullyVaxedProps.length = 0;
-      finalProps.length = 0;
       // call the processData function
       processData(geojson, data, date);
       // reset the data in the source layer
@@ -319,6 +373,16 @@
       //return the Gregorian Date
       return year + "-" + month + "-" + day;
     }; // end gregorianDate()
+
+    // group objects in array by property
+    function groupBy(arr, property) {
+      return arr.reduce(function(memo, x) {
+        if (!memo[x[property]]) { memo[x[property]] = []; }
+        memo[x[property]].push(x);
+        return memo;
+      }, {});
+    };
+
 
 /* HOVER SETTINGS BELOW */
 
